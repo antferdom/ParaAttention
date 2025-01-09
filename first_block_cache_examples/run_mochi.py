@@ -7,9 +7,9 @@ pipe = MochiPipeline.from_pretrained(
     torch_dtype=torch.bfloat16,
 ).to("cuda")
 
-from para_attn.focus_attn.diffusers_adapters import apply_focus_attn_on_pipe
+from para_attn.first_block_cache.diffusers_adapters import apply_cache_on_pipe
 
-apply_focus_attn_on_pipe(pipe)
+apply_cache_on_pipe(pipe)
 
 # Enable memory savings
 # pipe.enable_model_cpu_offload()

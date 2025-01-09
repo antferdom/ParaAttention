@@ -16,6 +16,12 @@ pipe = HunyuanVideoPipeline.from_pretrained(
     revision="refs/pr/18",
 ).to("cuda")
 
+from para_attn.first_block_cache.diffusers_adapters import apply_cache_on_pipe
+
+apply_cache_on_pipe(pipe)
+
+# Enable memory savings
+# pipe.enable_model_cpu_offload()
 pipe.vae.enable_tiling(
     # Make it runnable on GPUs with 48GB memory
     # tile_sample_min_height=128,
@@ -25,12 +31,6 @@ pipe.vae.enable_tiling(
     # tile_sample_min_num_frames=32,
     # tile_sample_stride_num_frames=24,
 )
-
-from para_attn.focus_attn.diffusers_adapters import apply_focus_attn_on_pipe
-
-apply_focus_attn_on_pipe(pipe)
-
-# pipe.enable_model_cpu_offload()
 
 # pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune-no-cudagraphs")
 

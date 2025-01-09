@@ -5,10 +5,12 @@ from diffusers.utils import export_to_video
 
 dist.init_process_group()
 
+torch.cuda.set_device(dist.get_rank())
+
 pipe = MochiPipeline.from_pretrained(
     "genmo/mochi-1-preview",
     torch_dtype=torch.bfloat16,
-).to(f"cuda:{dist.get_rank()}")
+).to("cuda")
 
 from para_attn.context_parallel import init_context_parallel_mesh
 from para_attn.context_parallel.diffusers_adapters import parallelize_pipe
@@ -21,6 +23,10 @@ parallelize_pipe(
         max_ring_dim_size=2,
     ),
 )
+
+# from para_attn.first_block_cache.diffusers_adapters import apply_cache_on_pipe
+
+# apply_cache_on_pipe(pipe)
 
 # Enable memory savings
 # pipe.enable_model_cpu_offload(gpu_id=dist.get_rank())

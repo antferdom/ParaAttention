@@ -2,8 +2,13 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
-import torch.distributed._functional_collectives as ft_c
-import torch.distributed.distributed_c10d as c10d
+
+if dist.is_available():
+    import torch.distributed._functional_collectives as ft_c
+    import torch.distributed.distributed_c10d as c10d
+else:
+    ft_c = None
+    c10d = None
 
 
 def get_group(group=None):
@@ -82,6 +87,13 @@ def all_to_all_single_autograd_sync(x, *args, **kwargs):
     return x
 
 
+def all_reduce_sync(x, *args, group=None, **kwargs):
+    group = get_group(group)
+    x = ft_c.all_reduce(x, *args, group=group, **kwargs)
+    x = _maybe_wait(x)
+    return x
+
+
 def get_buffer(
     shape_or_tensor: Union[Tuple[int], torch.Tensor],
     *,
@@ -130,9 +142,7 @@ def get_complete_tensor(
     dim: int = 0,
     group=None,
 ) -> torch.Tensor:
-    permute_dims = list(range(tensor.dim()))
-    permute_dims[dim], permute_dims[0] = permute_dims[0], permute_dims[dim]
-    tensor = tensor.permute(permute_dims).contiguous()
+    tensor = tensor.transpose(0, dim).contiguous()
     output_tensor = all_gather_tensor_sync(tensor, gather_dim=0, group=group)
-    output_tensor = output_tensor.permute(permute_dims)
+    output_tensor = output_tensor.transpose(0, dim)
     return output_tensor

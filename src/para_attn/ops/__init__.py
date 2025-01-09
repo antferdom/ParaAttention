@@ -151,7 +151,7 @@ def _attention_forward_with_lse(
     raise NotImplementedError
 
 
-@_torch_custom_op_wrapper("para_attn::attention_forward_with_lse", mutates_args=(), device_types="cuda")
+@_torch_custom_op_wrapper("para_attn::attention_forward_with_lse", mutates_args=(), device_types=("cpu", "cuda"))
 def attention_forward_with_lse(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -317,7 +317,7 @@ def _(
         query,
         key,
         value,
-        attn_mask=attn_mask,
+        # attn_mask=attn_mask,
         dropout_p=dropout_p,
         is_causal=is_causal,
         scale=scale,

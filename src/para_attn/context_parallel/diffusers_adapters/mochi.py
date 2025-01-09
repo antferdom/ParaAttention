@@ -10,6 +10,9 @@ from para_attn.para_attn_interface import UnifiedAttnMode
 
 
 def parallelize_transformer(transformer: MochiTransformer3DModel, *, mesh=None):
+    if getattr(transformer, "_is_parallelized", False):
+        return transformer
+
     mesh = init_context_parallel_mesh(transformer.device.type, mesh=mesh)
     batch_mesh = mesh["batch"]
     seq_mesh = mesh["ring", "ulysses"]._flatten()
@@ -53,8 +56,7 @@ def parallelize_transformer(transformer: MochiTransformer3DModel, *, mesh=None):
             return output.__class__(sample, *output[1:])
         return (sample, *output[1:])
 
-    new_forward = new_forward.__get__(transformer)
-    transformer.forward = new_forward
+    transformer.forward = new_forward.__get__(transformer)
 
     original_time_embed_forward = transformer.time_embed.forward
 
@@ -76,8 +78,7 @@ def parallelize_transformer(transformer: MochiTransformer3DModel, *, mesh=None):
         caption_proj = DP.get_assigned_chunk(caption_proj, dim=-2, group=seq_mesh)
         return conditioning, caption_proj
 
-    new_time_embed_forward = new_time_embed_forward.__get__(transformer.time_embed)
-    transformer.time_embed.forward = new_time_embed_forward
+    transformer.time_embed.forward = new_time_embed_forward.__get__(transformer.time_embed)
 
     original_rope_forward = transformer.rope.forward
 
@@ -110,8 +111,9 @@ def parallelize_transformer(transformer: MochiTransformer3DModel, *, mesh=None):
         rope_sin = rope_sin.reshape(-1, h, f)
         return rope_cos, rope_sin
 
-    new_rope_forward = new_rope_forward.__get__(transformer.rope)
-    transformer.rope.forward = new_rope_forward
+    transformer.rope.forward = new_rope_forward.__get__(transformer.rope)
+
+    transformer._is_parallelized = True
 
     return transformer
 
@@ -124,9 +126,7 @@ def parallelize_pipe(pipe: DiffusionPipeline, *, shallow_patch: bool = False, **
         @functools.wraps(original_call)
         def new_call(self, *args, generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None, **kwargs):
             if generator is None and getattr(self, "_is_parallelized", False):
-                seed = torch.seed()
-                seed += torch.iinfo(torch.int64).min
-                seed_t = torch.full([1], seed, dtype=torch.int64, device=self.device)
+                seed_t = torch.randint(0, torch.iinfo(torch.int64).max, [1], dtype=torch.int64, device=self.device)
                 seed_t = DP.get_complete_tensor(seed_t, dim=0)
                 seed_t = DP.get_assigned_chunk(seed_t, dim=0, idx=0)
                 seed = seed_t.item()

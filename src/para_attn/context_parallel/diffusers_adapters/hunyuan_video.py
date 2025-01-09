@@ -14,6 +14,9 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 def parallelize_transformer(transformer: HunyuanVideoTransformer3DModel, *, mesh=None):
+    if getattr(transformer, "_is_parallelized", False):
+        return transformer
+
     mesh = init_context_parallel_mesh(transformer.device.type, mesh=mesh)
     batch_mesh = mesh["batch"]
     seq_mesh = mesh["ring", "ulysses"]._flatten()
@@ -69,6 +72,7 @@ def parallelize_transformer(transformer: HunyuanVideoTransformer3DModel, *, mesh
 
         world_size = DP.get_world_size(seq_mesh)
 
+        temb = DP.get_assigned_chunk(temb, dim=0, group=batch_mesh)
         hidden_states = DP.get_assigned_chunk(hidden_states, dim=0, group=batch_mesh)
         hidden_states = DP.get_assigned_chunk(hidden_states, dim=-2, group=seq_mesh)
         encoder_hidden_states = DP.get_assigned_chunk(encoder_hidden_states, dim=0, group=batch_mesh)
@@ -165,6 +169,8 @@ def parallelize_transformer(transformer: HunyuanVideoTransformer3DModel, *, mesh
         hidden_states = hidden_states.permute(0, 4, 1, 5, 2, 6, 3, 7)
         hidden_states = hidden_states.flatten(6, 7).flatten(4, 5).flatten(2, 3)
 
+        hidden_states = hidden_states.to(timestep.dtype)
+
         if USE_PEFT_BACKEND:
             # remove `lora_scale` from each PEFT layer
             unscale_lora_layers(self, lora_scale)
@@ -174,8 +180,9 @@ def parallelize_transformer(transformer: HunyuanVideoTransformer3DModel, *, mesh
 
         return Transformer2DModelOutput(sample=hidden_states)
 
-    new_forward = new_forward.__get__(transformer)
-    transformer.forward = new_forward
+    transformer.forward = new_forward.__get__(transformer)
+
+    transformer._is_parallelized = True
 
     return transformer
 
@@ -188,9 +195,7 @@ def parallelize_pipe(pipe: DiffusionPipeline, *, shallow_patch: bool = False, **
         @functools.wraps(original_call)
         def new_call(self, *args, generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None, **kwargs):
             if generator is None and getattr(self, "_is_parallelized", False):
-                seed = torch.seed()
-                seed += torch.iinfo(torch.int64).min
-                seed_t = torch.full([1], seed, dtype=torch.int64, device=self.device)
+                seed_t = torch.randint(0, torch.iinfo(torch.int64).max, [1], dtype=torch.int64, device=self.device)
                 seed_t = DP.get_complete_tensor(seed_t, dim=0)
                 seed_t = DP.get_assigned_chunk(seed_t, dim=0, idx=0)
                 seed = seed_t.item()

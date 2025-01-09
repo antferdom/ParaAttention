@@ -4,10 +4,12 @@ from diffusers import FluxPipeline
 
 dist.init_process_group()
 
+torch.cuda.set_device(dist.get_rank())
+
 pipe = FluxPipeline.from_pretrained(
     "black-forest-labs/FLUX.1-dev",
     torch_dtype=torch.bfloat16,
-).to(f"cuda:{dist.get_rank()}")
+).to("cuda")
 
 from para_attn.context_parallel import init_context_parallel_mesh
 from para_attn.context_parallel.diffusers_adapters import parallelize_pipe
@@ -23,8 +25,14 @@ parallelize_pipe(
 )
 parallelize_vae(pipe.vae, mesh=mesh._flatten())
 
-torch._inductor.config.reorder_for_compute_comm_overlap = True
-pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune-no-cudagraphs")
+# from para_attn.first_block_cache.diffusers_adapters import apply_cache_on_pipe
+
+# apply_cache_on_pipe(pipe)
+
+# pipe.enable_model_cpu_offload(gpu_id=dist.get_rank())
+
+# torch._inductor.config.reorder_for_compute_comm_overlap = True
+# pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune-no-cudagraphs")
 
 image = pipe(
     "A cat holding a sign that says hello world",
