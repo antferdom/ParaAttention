@@ -285,6 +285,30 @@ Save the above code to `test.py` and run it with `torchrun`:
 torchrun --nproc_per_node=2 test.py
 ```
 
+## HTTP Inference Server
+ The `AsyncGenerationServer` located in `src/server/` is an HTTP server implemented using Flask, designed to handle asynchronous generation requests. It manages the creation and monitoring of the worker processes for performing multi-GPU inference. The server takes a python class with a model specific `setup` and `predict` implemented by the user of the server. The `setup` method must call `dist.init_process_group` and initialize the model, and the `predict` method is used to perform the inference. See [here](server/predictors.py) for an example.
+
+#### HTTP Endpoints
+- **`/generate` (POST)**: Accepts a generation request, validates parameters, and ensures all workers are ready. Returns a unique request ID for tracking.
+- **`/request_status/<request_id>` (POST)**: Checks the status of a specific generation request using the provided `request_id`. Determines if the request is in flight, completed, or not found.
+- **`/cancel` (POST)**: Cancels an ongoing generation request by setting a cancellation event for worker processes.
+- **`/server_status` (GET)**: Checks the health of the server and verifies that all worker processes are functioning correctly.
+
+The server can be used either by importing the `AsyncGenerationServer` class and calling its `run` method:
+```python
+from para_attn.server import AsyncGenerationServer
+
+server = AsyncGenerationServer(model, host, port, num_devices)
+server.run()
+```
+
+Or by running the `inference-server` command:
+```bash
+inference-server --model para_attn.server.predictors:FluxPredictor --host 127.0.0.1 --port 5000 --num_devices 2
+```
+In this later usage, the model path must be a module path that can be imported by `importlib.import_module`.
+
+
 # Run Tests
 
 ```bash

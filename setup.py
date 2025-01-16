@@ -49,7 +49,7 @@ setup(
             "pre-commit",
             "pytest>=7.0.0,<8.0.0",  # https://github.com/pytest-dev/pytest/issues/12273
             "expecttest",
-            #
+            "typer", # requirement for http server
             "transformers",
             "diffusers",
             "accelerate",
