@@ -1,4 +1,5 @@
 import time
+import os
 
 import pytest
 
@@ -6,6 +7,7 @@ import torch
 from torch.testing._internal.common_utils import instantiate_parametrized_tests, parametrize, run_tests
 from torch.testing._internal.distributed._tensor.common_dtensor import DTensorTestBase, with_comms
 
+os.environ["HF_HUB_CACHE"] = "/mnt/co-research/shared-models/hub"
 
 class DiffusionPipelineTest(DTensorTestBase):
     @property
